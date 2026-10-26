@@ -61,7 +61,7 @@ Maps an item name to its `examine` text. Item names double as their ids, which i
 - `HELP`, `COMBAT_HELP`: the help screens.
 - `PLAYER_MAX_HP`, `BOSS_MAX_HP`: balance numbers kept in one place.
 
-> **Note:** `ROOMS` is changed while you play (items are moved, `locked` entries are deleted). That's fine for a game that runs once per process. Restarting without relaunching would need a fresh copy, e.g. `copy.deepcopy(ROOMS)` in `Game.__init__`.
+> **Note:** `ROOMS` is a template. Each `Game` makes its own copy with `copy.deepcopy(ROOMS)` and changes only that copy (moving items, deleting `locked` entries). That way a new game always starts fresh, even in a long-running process like the MCP server.
 
 ## 2. Game state
 
@@ -69,6 +69,7 @@ All state that changes during play lives on the `Game` object:
 
 | Attribute | Purpose |
 |---|---|
+| `rooms` | This game's copy of `ROOMS` |
 | `room` | Id of the room the player is in |
 | `inventory` | List of item names the player carries |
 | `lantern_lit` | Whether the lantern is lit |
@@ -80,7 +81,7 @@ All state that changes during play lives on the `Game` object:
 | `boss_shrouded` | Whether the shadow shroud is up (50% miss chance, boss heals) |
 | `boss_turn`, `boss_charging` | Counter and flag for the heavy-attack pattern |
 
-The `here` property is shorthand for `ROOMS[self.room]`. `is_dark()` puts the darkness rule in one place, so movement, `take` and `examine` all apply it the same way.
+The `here` property is shorthand for `self.rooms[self.room]`. `is_dark()` puts the darkness rule in one place, so movement, `take` and `examine` all apply it the same way.
 
 ## 3. Command processing
 
@@ -188,6 +189,17 @@ These rough win rates came from 2,000 simulated fights per setup:
 - **Win**: `check_win()` runs after every move. Reaching the cottage with the crown ends the game and shows the move count. The Shadow Knight guards the only way back, so a win always means it was defeated.
 - **Lose**: HP drops to 0 in `boss_attack()`.
 - **Quit**: `quit`, Ctrl+C or end of input (EOF). All three set `running = False` or break out of the loop cleanly.
+
+## 8. MCP server
+
+`mcp_server.py` lets AI assistants play over the Model Context Protocol. It uses the `FastMCP` helper from the official `mcp` Python SDK and talks over stdio.
+
+It reuses `Game` without changing how the game prints:
+
+- **Output capture:** with stdio, stdout carries the MCP protocol itself. So every game call runs inside `contextlib.redirect_stdout`, and the captured text becomes the tool result. `intro()` was split out of `run()` so the server can show the opening without the input loop.
+- **One game per server:** a stdio server serves a single client, so a module-level `game` variable holds the current game.
+- **Tools:** `new_game` creates a fresh `Game`. `play` passes a command to `handle()`, starting a game first if none is running, and adds a note when the game ends. `get_state` returns structured data. It respects darkness, so it doesn't reveal what's in an unlit room.
+- **End of game:** `outcome()` works out won, lost or quit from existing state (HP, room, inventory) instead of adding new flags to `Game`.
 
 ## Extending the game
 

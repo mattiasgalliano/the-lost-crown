@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The Lost Crown - a small text adventure for the command line."""
 
+import copy
 import random
 import textwrap
 
@@ -118,6 +119,8 @@ def say(text):
 
 class Game:
     def __init__(self):
+        # each game gets its own copy of the world, so items and locks reset
+        self.rooms = copy.deepcopy(ROOMS)
         self.room = "cottage"
         self.inventory = []
         self.lantern_lit = False
@@ -134,7 +137,7 @@ class Game:
     # --- helpers -----------------------------------------------------------
     @property
     def here(self):
-        return ROOMS[self.room]
+        return self.rooms[self.room]
 
     def is_dark(self):
         return self.here.get("dark") and not ("lantern" in self.inventory and self.lantern_lit)
@@ -447,7 +450,7 @@ class Game:
             print("I don't understand that. Type 'help' for commands.")
             self.moves -= 1
 
-    def run(self):
+    def intro(self):
         print("=" * 40)
         print("        THE LOST CROWN")
         print("=" * 40)
@@ -455,6 +458,9 @@ class Game:
             "forest. Find it and bring it back to your cottage.")
         print("Type 'help' for a list of commands.")
         self.describe()
+
+    def run(self):
+        self.intro()
         while self.running:
             try:
                 line = input("\n> ")
